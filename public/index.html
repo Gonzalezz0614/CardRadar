@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CardRadar</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0a0a0a; color: #f0f0f0; font-family: system-ui, sans-serif; padding: 20px 16px 60px; }
+  .logo { font-size: 11px; letter-spacing: 0.2em; color: #c8f04a; text-transform: uppercase; margin-bottom: 10px; }
+  h1 { font-size: 26px; font-weight: 700; margin-bottom: 8px; }
+  h1 span { color: #c8f04a; }
+  .subtitle { color: #888; font-size: 14px; margin-bottom: 24px; line-height: 1.5; }
+  .card { background: #111; border: 1px solid #1e1e1e; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+  input[type="text"] { width: 100%; background: #0a0a0a; border: 1px solid #1e1e1e; border-radius: 8px; padding: 12px 14px; color: #f0f0f0; font-size: 15px; outline: none; margin-bottom: 10px; }
+  input[type="text"]:focus { border-color: #c8f04a; }
+  .btn { width: 100%; background: #c8f04a; color: #000; border: none; border-radius: 8px; padding: 13px; font-size: 15px; font-weight: 700; cursor: pointer; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .chips { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { background: #0a0a0a; border: 1px solid #1e1e1e; border-radius: 6px; padding: 6px 10px; font-size: 12px; color: #888; cursor: pointer; }
+  .status { font-size: 13px; color: #888; margin-bottom: 12px; min-height: 18px; }
+  .error { color: #ff4444; }
+  .market-card { background: #111; border: 1px solid #1e1e1e; border-radius: 12px; padding: 16px; margin-bottom: 12px; display: flex; gap: 20px; flex-wrap: wrap; }
+  .stat-label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #555; margin-bottom: 4px; }
+  .stat-val { font-size: 22px; font-weight: 700; color: #c8f04a; }
+  .section-title { font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; color: #555; margin: 16px 0 8px; }
+  .deal { background: #111; border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+  .deal.hot { border: 1px solid rgba(200,240,74,0.4); }
+  .deal.normal { border: 1px solid #1e1e1e; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 6px; margin-bottom: 8px; }
+  .badge.green { background: rgba(200,240,74,0.12); color: #c8f04a; }
+  .badge.red { background: rgba(255,68,68,0.12); color: #ff4444; }
+  .badge.gray { background: rgba(255,255,255,0.05); color: #888; }
+  .deal-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .deal-meta { font-size: 12px; color: #888; margin-bottom: 8px; }
+  .price-row { display: flex; justify-content: space-between; align-items: center; }
+  .ask { font-size: 18px; font-weight: 700; }
+  .mkt { font-size: 12px; color: #555; text-decoration: line-through; }
+  .view-btn { background: transparent; border: 1px solid #c8f04a; color: #c8f04a; border-radius: 6px; padding: 6px 14px; font-size: 13px; cursor: pointer; text-decoration: none; display: inline-block; }
+</style>
+</head>
+<body>
+
+<div class="logo">CardRadar</div>
+<h1>Find cards <span>below market</span> in real time.</h1>
+<p class="subtitle">Live eBay data. Real sold prices. Instant arbitrage alerts.</p>
+
+<div class="card">
+  <input type="text" id="cardInput" placeholder="e.g. 2017 Panini Prizm Mahomes Rookie" />
+  <button class="btn" id="searchBtn" onclick="doSearch()">Scan Now</button>
+  <div class="chips">
+    <span class="chip" onclick="fill(this)">2020 Prizm Mahomes Rookie</span>
+    <span class="chip" onclick="fill(this)">LeBron James Rookie PSA 9</span>
+    <span class="chip" onclick="fill(this)">Griffey Jr 1989 Rookie</span>
+    <span class="chip" onclick="fill(this)">Charizard Holo PSA 10</span>
+    <span class="chip" onclick="fill(this)">2023 Bowman Chrome Prospect</span>
+  </div>
+</div>
+
+<div class="status" id="status"></div>
+<div id="results"></div>
+
+<script>
+function fill(el) { document.getElementById('cardInput').value = el.textContent.trim(); }
+document.getElementById('cardInput').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+
+async function doSearch() {
+  const query = document.getElementById('cardInput').value.trim();
+  if (!query) return;
+  const btn = document.getElementById('searchBtn');
+  const statusEl = document.getElementById('status');
+  const resultsEl = document.getElementById('results');
+  btn.disabled = true;
+  statusEl.className = 'status';
+  statusEl.textContent = 'Scanning eBay live data...';
+  resultsEl.innerHTML = '';
+  try {
+    const resp = await fetch('/api/scout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query })
+    });
+    const data = await resp.json();
+    if (data.error) { statusEl.className = 'status error'; statusEl.textContent = 'Error: ' + data.error; btn.disabled = false; return; }
+    statusEl.textContent = `✓ Market value based on ${data.soldCount} recent eBay sales`;
+    renderResults(data);
+  } catch(e) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Error: ' + e.message;
+  }
+  btn.disabled = false;
+}
+
+function renderResults(data) {
+  const el = document.getElementById('results');
+  const market = data.marketValue;
+  const deals = data.listings.filter(l => l.discount >= 15);
+  const others = data.listings.filter(l => l.discount < 15);
+
+  let html = `<div class="market-card">
+    <div><div class="stat-label">Market Value</div><div class="stat-val">$${market}</div></div>
+    <div><div class="stat-label">Based On</div><div class="stat-val" style="color:#f0f0f0;font-size:16px">${data.soldCount} sales</div></div>
+  </div>`;
+
+  if (deals.length) {
+    html += `<div class="section-title">🎯 ${deals.length} deal${deals.length>1?'s':''} found — 15%+ below market</div>`;
+    deals.forEach(l => {
+      html += `<div class="deal hot">
+        <span class="badge green">-${l.discount}% below market</span>
+        <div class="deal-title">${l.title}</div>
+        <div class="price-row">
+          <div><div class="ask" style="color:#c8f04a">$${l.price}</div><div class="mkt">$${market} market</div></div>
+          <a class="view-btn" href="${l.link}" target="_blank">Buy Now →</a>
+        </div>
+      </div>`;
+    });
+  } else {
+    html += `<div class="card" style="text-align:center;color:#888">No deals 15%+ below market right now. Check back soon.</div>`;
+  }
+
+  if (others.length) {
+    html += `<div class="section-title">Other active listings</div>`;
+    others.slice(0, 10).forEach(l => {
+      const above = l.discount < 0;
+      html += `<div class="deal normal">
+        <span class="badge ${above?'red':'gray'}">${above?'+'+Math.abs(l.discount)+'% above':l.discount+'% below'} market</span>
+        <div class="deal-title">${l.title}</div>
+        <div class="price-row">
+          <div><div class="ask" style="color:${above?'#ff4444':'#888'}">$${l.price}</div><div class="mkt">$${market} market</div></div>
+          <a class="view-btn" href="${l.link}" target="_blank">View →</a>
+        </div>
+      </div>`;
+    });
+  }
+
+  el.innerHTML = html;
+}
+</script>
+</body>
+</html>
